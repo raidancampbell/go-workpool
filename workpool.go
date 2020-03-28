@@ -4,6 +4,7 @@
 //another goroutine per key max for work queue management
 //one goroutine to manage the workpool
 //TODO: a goroutine should die when there's no work and be recreated when more work is available
+// a new bool map should be able to solve this
 package go_workpool
 
 import (
@@ -45,21 +46,21 @@ type Workpool struct {
 
 type workQueue struct {
 	// queue of work
+	mtx *sync.Mutex
 	queue []Work
 }
 
 func (wq *workQueue) enqueue(w Work) {
+	wq.mtx.Lock()
+	defer wq.mtx.Unlock()
 	wq.queue = append(wq.queue, w)
 }
 
 func (wq *workQueue) deque() Work {
 	defer func() {
-		if len(wq.queue) == 0 {
-			var tmpW []Work
-			wq.queue = tmpW
-		} else {
-			wq.queue = wq.queue[1:]
-		}
+		wq.mtx.Lock()
+		defer wq.mtx.Unlock()
+		wq.queue = wq.queue[1:]
 	}()
 	return wq.queue[0]
 }
@@ -84,10 +85,7 @@ func (wp *Workpool) manageKeyQueue(key string) {
 		// wait until there's actually any work.  If there's no work, then this will block until there is work
 		nw, _ := wp.noWork.Load(key)
 		err := nw.(*xsync.Weighted).Acquire(context.TODO(), 1)
-		if err != nil {
-			// this should never happen
-			panic(err)
-		}
+		must(err)
 		p, _ := wp.pool.Load(key)
 		work := p.(*workQueue).deque()
 		go func() {
@@ -105,18 +103,16 @@ func (wp *Workpool) Submit(w Work) {
 	wp.submitMtx.Lock()//TODO: check if this is required
 	defer wp.submitMtx.Unlock()
 
+	// the notif map is recycled to indicate whether the key has ever been seen before
 	if _, ok := wp.notif.Load(w.Key()); !ok {
 		// if this is the first time we've seen this key, set everything up
-		var tmpW []Work
-		wp.pool.Store(w.Key(), &workQueue{queue: tmpW})
+		wp.pool.Store(w.Key(), &workQueue{queue: make([]Work, 0), mtx:&sync.Mutex{}})
 		wp.notif.Store(w.Key(), &sync.Mutex{})
 		sem := xsync.NewWeighted(math.MaxInt64)
 		wp.noWork.Store(w.Key(), sem)
 
 		err := sem.Acquire(context.TODO(), math.MaxInt64)
-		if err != nil {
-			panic(err)
-		}
+		must(err)
 		go wp.manageKeyQueue(w.Key())
 	}
 
@@ -127,4 +123,10 @@ func (wp *Workpool) Submit(w Work) {
 
 	sem, _ := wp.noWork.Load(w.Key())
 	sem.(*xsync.Weighted).Release(1)
+}
+
+func must(e error) {
+	if e != nil {
+		panic(e)
+	}
 }
