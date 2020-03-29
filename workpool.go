@@ -6,7 +6,7 @@ package workpool
 
 import (
 	"context"
-	xsync "golang.org/x/sync/semaphore"
+	"golang.org/x/sync/semaphore"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -91,14 +91,14 @@ func (wp *Workpool) manageKeyQueue(key string) {
 		// there's a race between failing to find work and someone giving us work.
 		// the below solution makes the race benign by allowing another copy of this goroutine to be created
 		// the timeouts allow the issue to heal itself.
-		err := nw.(*xsync.Weighted).Acquire(ctx, 1)
+		err := nw.(*semaphore.Weighted).Acquire(ctx, 1)
 		if err != nil {
 			// mark myself as offline.  Any raced copies of this function are still blocked by the mutex
 			wp.isAlive.Store(key, false)
 			// Do another check.  if there's really no work, then quit.  The second 100ms is a "best effort" synchronization
 			// this allows the Submit function an extra 100ms to spin up a raced copy of this goroutine.
 			// any raced copies of this function are still blocked by the mutex.
-			err := nw.(*xsync.Weighted).Acquire(ctx, 1)
+			err := nw.(*semaphore.Weighted).Acquire(ctx, 1)
 			if err != nil {
 				// final point of race: if a piece of work is submitted now, we won't execute it.
 				//another raced groutine will have to take it
@@ -138,7 +138,7 @@ func (wp *Workpool) Submit(w Work) {
 		// if this is the first time we've seen this key, set everything up
 		wp.pool.Store(w.Key(), &workQueue{queue: make([]Work, 0), mtx: &sync.Mutex{}})
 		wp.notif.Store(w.Key(), &sync.Mutex{})
-		sem := xsync.NewWeighted(math.MaxInt64)
+		sem := semaphore.NewWeighted(math.MaxInt64)
 		wp.noWork.Store(w.Key(), sem)
 		wp.isAlive.Store(w.Key(), false)
 
@@ -152,7 +152,7 @@ func (wp *Workpool) Submit(w Work) {
 	atomic.AddUint64(wp.queueLen, 1)
 
 	sem, _ := wp.noWork.Load(w.Key())
-	sem.(*xsync.Weighted).Release(1)
+	sem.(*semaphore.Weighted).Release(1)
 
 	if isAlive, _ := wp.isAlive.Load(w.Key()); !isAlive.(bool) {
 		wp.isAlive.Store(w.Key(), true)
