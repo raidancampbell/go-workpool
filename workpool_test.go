@@ -60,7 +60,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 			s.values.Store(k, s.getValue(k)+1)
 		},
 	})
-	v = 1
+	//v = 1
 
 	w = append(w, wrk{
 		k: k,
@@ -69,7 +69,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 			s.values.Store(k, s.getValue(k)+1)
 		},
 	})
-	v = 2
+	//v = 2
 
 	w = append(w, wrk{
 		k: k,
@@ -78,7 +78,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 			s.values.Store(k, int(math.Pow(float64(s.getValue(k)), float64(2))))
 		},
 	})
-	v = 4
+	//v = 4
 
 	w = append(w, wrk{
 		k: k,
@@ -87,7 +87,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 			s.values.Store(k, s.getValue(k)*2)
 		},
 	})
-	v = 8
+	//v = 8
 
 	w = append(w, wrk{
 		k: k,
@@ -96,7 +96,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 			s.values.Store(k, int(math.Pow(float64(s.getValue(k)), float64(2))))
 		},
 	})
-	v = 64
+	//v = 64
 
 	w = append(w, wrk{
 		k: k,
@@ -105,7 +105,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 			s.values.Store(k, s.getValue(k)-2)
 		},
 	})
-	v = 62
+	//v = 62
 
 	w = append(w, wrk{
 		k: k,

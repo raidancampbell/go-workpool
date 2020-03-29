@@ -87,7 +87,7 @@ func (wp *Workpool) manageKeyQueue(key string) {
 
 		// wait 100 ms for any work.  If none comes, die
 		nw, _ := wp.noWork.Load(key)
-		ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(100*time.Millisecond))
+		ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(100*time.Millisecond)) //nolint: govet
 		// there's a race between failing to find work and someone giving us work.
 		// the below solution makes the race benign by allowing another copy of this goroutine to be created
 		// the timeouts allow the issue to heal itself.
