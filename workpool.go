@@ -1,10 +1,7 @@
 // package go_workpool implements a workpool synchronized on a work item's Key.
-//in the course of the workpool's life, two times the number of unique keys (plus 1) can be created
+//in the course of the workpool's life, two times the number of unique keys can be created
 //one goroutine per key max for parallel processing
 //another goroutine per key max for work queue management
-//one goroutine to manage the workpool
-//TODO: a goroutine should die when there's no work and be recreated when more work is available
-// a new bool map should be able to solve this
 package go_workpool
 
 import (
@@ -13,6 +10,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Work is the interface for callers to use this library.  Each unit of work (such as an event) must implement the Work interface
@@ -42,6 +40,9 @@ type Workpool struct {
 	// when there's no work, this needs to block with a non-busy method.
 	// When work is added, this needs to pass through
 	noWork *sync.Map
+
+	// goroutines will die after all their work is done and be recreated when more work arrives for them
+	isAlive *sync.Map
 }
 
 type workQueue struct {
@@ -57,10 +58,10 @@ func (wq *workQueue) enqueue(w Work) {
 }
 
 func (wq *workQueue) deque() Work {
+	wq.mtx.Lock()
 	defer func() {
-		wq.mtx.Lock()
-		defer wq.mtx.Unlock()
 		wq.queue = wq.queue[1:]
+		wq.mtx.Unlock()
 	}()
 	return wq.queue[0]
 }
@@ -71,6 +72,7 @@ func NewWorkpool() *Workpool {
 		pool:     &sync.Map{},
 		notif:    &sync.Map{},
 		noWork:   &sync.Map{},
+		isAlive: &sync.Map{},
 	}
 }
 
@@ -82,25 +84,52 @@ func (wp *Workpool) manageKeyQueue(key string) {
 		notif, _ := wp.notif.Load(key)
 		notif.(*sync.Mutex).Lock()
 
-		// wait until there's actually any work.  If there's no work, then this will block until there is work
+		// wait 100 ms for any work.  If none comes, die
 		nw, _ := wp.noWork.Load(key)
-		err := nw.(*xsync.Weighted).Acquire(context.TODO(), 1)
-		must(err)
+		ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(100 * time.Millisecond))
+		// there's a race between failing to find work and someone giving us work.
+		// the below solution makes the race benign by allowing another copy of this goroutine to be created
+		// the timeouts allow the issue to heal itself.
+		err := nw.(*xsync.Weighted).Acquire(ctx, 1)
+		if err != nil {
+			// mark myself as offline.  Any raced copies of this function are still blocked by the mutex
+			wp.isAlive.Store(key, false)
+			// Do another check.  if there's really no work, then quit.  The second 100ms is a "best effort" synchronization
+			// this allows the Submit function an extra 100ms to spin up a raced copy of this goroutine.
+			// any raced copies of this function are still blocked by the mutex.
+			err := nw.(*xsync.Weighted).Acquire(ctx, 1)
+			if err != nil {
+				// final point of race: if a piece of work is submitted now, we won't execute it.
+				//another raced groutine will have to take it
+				// free up the mutex for any raced goroutine
+				notif.(*sync.Mutex).Unlock()
+				return
+			}
+		}
+		// grab the work, since we know some is ready
 		p, _ := wp.pool.Load(key)
 		work := p.(*workQueue).deque()
+
+		// fork off to complete the work.  After the work is completed, unlock the mutex
 		go func() {
 			work.Do()
 			atomic.AddUint64(wp.queueLen, ^uint64(0))
-			notif, _ := wp.notif.Load(key)
 			notif.(*sync.Mutex).Unlock()
 		}()
+
+		// if we timed out earlier, there's another copy of our goroutine alive
+		// we already marked ourselves as dead.  let the raced copy of our goroutine take over once the work is done
+		// and the mutex is released
+		if err != nil {
+			return
+		}
 	}
 }
 
 // Submit submits the given work to the workpool.  If other work is already in place with the same key, then this work
 // will be queued.  Order is guaranteed as a FIFO queue.
 func (wp *Workpool) Submit(w Work) {
-	wp.submitMtx.Lock()//TODO: check if this is required
+	wp.submitMtx.Lock()
 	defer wp.submitMtx.Unlock()
 
 	// the notif map is recycled to indicate whether the key has ever been seen before
@@ -110,19 +139,24 @@ func (wp *Workpool) Submit(w Work) {
 		wp.notif.Store(w.Key(), &sync.Mutex{})
 		sem := xsync.NewWeighted(math.MaxInt64)
 		wp.noWork.Store(w.Key(), sem)
+		wp.isAlive.Store(w.Key(), false)
 
 		err := sem.Acquire(context.TODO(), math.MaxInt64)
 		must(err)
-		go wp.manageKeyQueue(w.Key())
 	}
-
-	atomic.AddUint64(wp.queueLen, 1)
 
 	pool, _ := wp.pool.Load(w.Key())
 	pool.(*workQueue).enqueue(w)
 
+	atomic.AddUint64(wp.queueLen, 1)
+
 	sem, _ := wp.noWork.Load(w.Key())
 	sem.(*xsync.Weighted).Release(1)
+
+	if isAlive, _ := wp.isAlive.Load(w.Key()); !isAlive.(bool){
+		wp.isAlive.Store(w.Key(), true)
+		go wp.manageKeyQueue(w.Key())
+	}
 }
 
 func must(e error) {
