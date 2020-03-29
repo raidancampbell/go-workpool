@@ -121,7 +121,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
 func TestSingleUnique(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	sut := NewWorkpool()
+	sut := New()
 	ntw := newRandomTestWork(&wg)
 	sut.Submit(ntw)
 	wg.Wait()
@@ -131,7 +131,7 @@ func TestSingleUnique(t *testing.T) {
 func TestDoubleUnique(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
-	sut := NewWorkpool()
+	sut := New()
 	sut.Submit(newRandomTestWork(&wg))
 	sut.Submit(newRandomTestWork(&wg))
 	wg.Wait()
@@ -142,7 +142,7 @@ func TestManyUnique(t *testing.T) {
 	N := 10000
 	wg := sync.WaitGroup{}
 	wg.Add(N)
-	sut := NewWorkpool()
+	sut := New()
 	for i := 0; i<N; i++ {
 		sut.Submit(newRandomTestWork(&wg))
 	}
@@ -153,7 +153,7 @@ func TestManyUnique(t *testing.T) {
 func BenchmarkManyUnique(b *testing.B) {
 	wg := sync.WaitGroup{}
 	wg.Add(b.N)
-	sut := NewWorkpool()
+	sut := New()
 	for i := 0; i<b.N; i++ {
 		sut.Submit(newRandomTestWork(&wg))
 	}
@@ -163,7 +163,7 @@ func BenchmarkManyUnique(b *testing.B) {
 func TestDuplicate(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(7 * 2)
-	sut := NewWorkpool()
+	sut := New()
 	s := newSystem()
 	w, expected1 := s.newWorkForKey(&wg, "key1")
 	for _, unit := range w {
@@ -184,7 +184,7 @@ func TestManyDuplicate(t *testing.T) {
 	N := 10000
 	wg := sync.WaitGroup{}
 	wg.Add(7 * N)
-	sut := NewWorkpool()
+	sut := New()
 	s := newSystem()
 	var expecteds []int
 
@@ -206,7 +206,7 @@ func TestManyDuplicate(t *testing.T) {
 func BenchmarkManyDuplicate(b *testing.B) {
 	wg := sync.WaitGroup{}
 	wg.Add(7 * b.N)
-	sut := NewWorkpool()
+	sut := New()
 	s := newSystem()
 
 	for i := 0; i<b.N; i++ {

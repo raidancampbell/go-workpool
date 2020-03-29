@@ -66,7 +66,7 @@ func (wq *workQueue) deque() Work {
 	return wq.queue[0]
 }
 
-func NewWorkpool() *Workpool {
+func New() *Workpool {
 	return &Workpool{
 		queueLen: new(uint64),
 		pool:     &sync.Map{},
