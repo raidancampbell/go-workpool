@@ -1,8 +1,8 @@
-// package go_workpool implements a workpool synchronized on a work item's Key.
+// Package workpool implements a workpool synchronized on a work item's Key.
 //in the course of the workpool's life, two times the number of unique keys can be created
 //one goroutine per key max for parallel processing
 //another goroutine per key max for work queue management
-package go_workpool
+package workpool
 
 import (
 	"context"
@@ -25,7 +25,7 @@ type Work interface {
 	Do()
 }
 
-// Workpool
+// Workpool manages work delivery.  Work is delivered via the Submit function
 type Workpool struct {
 	// how much work is there in total.  This is just for cute metrics or whatever.  Not much real value in this
 	queueLen *uint64
@@ -47,7 +47,7 @@ type Workpool struct {
 
 type workQueue struct {
 	// queue of work
-	mtx *sync.Mutex
+	mtx   *sync.Mutex
 	queue []Work
 }
 
@@ -66,13 +66,14 @@ func (wq *workQueue) deque() Work {
 	return wq.queue[0]
 }
 
+// New instantiates a default Workpool
 func New() *Workpool {
 	return &Workpool{
 		queueLen: new(uint64),
 		pool:     &sync.Map{},
 		notif:    &sync.Map{},
 		noWork:   &sync.Map{},
-		isAlive: &sync.Map{},
+		isAlive:  &sync.Map{},
 	}
 }
 
@@ -86,7 +87,7 @@ func (wp *Workpool) manageKeyQueue(key string) {
 
 		// wait 100 ms for any work.  If none comes, die
 		nw, _ := wp.noWork.Load(key)
-		ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(100 * time.Millisecond))
+		ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(100*time.Millisecond))
 		// there's a race between failing to find work and someone giving us work.
 		// the below solution makes the race benign by allowing another copy of this goroutine to be created
 		// the timeouts allow the issue to heal itself.
@@ -135,7 +136,7 @@ func (wp *Workpool) Submit(w Work) {
 	// the notif map is recycled to indicate whether the key has ever been seen before
 	if _, ok := wp.notif.Load(w.Key()); !ok {
 		// if this is the first time we've seen this key, set everything up
-		wp.pool.Store(w.Key(), &workQueue{queue: make([]Work, 0), mtx:&sync.Mutex{}})
+		wp.pool.Store(w.Key(), &workQueue{queue: make([]Work, 0), mtx: &sync.Mutex{}})
 		wp.notif.Store(w.Key(), &sync.Mutex{})
 		sem := xsync.NewWeighted(math.MaxInt64)
 		wp.noWork.Store(w.Key(), sem)
@@ -153,7 +154,7 @@ func (wp *Workpool) Submit(w Work) {
 	sem, _ := wp.noWork.Load(w.Key())
 	sem.(*xsync.Weighted).Release(1)
 
-	if isAlive, _ := wp.isAlive.Load(w.Key()); !isAlive.(bool){
+	if isAlive, _ := wp.isAlive.Load(w.Key()); !isAlive.(bool) {
 		wp.isAlive.Store(w.Key(), true)
 		go wp.manageKeyQueue(w.Key())
 	}

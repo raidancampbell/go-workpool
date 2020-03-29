@@ -1,4 +1,4 @@
-package go_workpool
+package workpool
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -34,8 +34,9 @@ func newRandomTestWork(wg *sync.WaitGroup) Work {
 type system struct {
 	values *sync.Map
 }
+
 func newSystem() *system {
-	return &system{values:&sync.Map{}}
+	return &system{values: &sync.Map{}}
 }
 
 // getValue is a simple helper to show the current value for the given key
@@ -48,7 +49,7 @@ func (s *system) getValue(k string) int {
 }
 
 // newWorkForKey creates a slice of work for the given key, returning both the work and the expected final value
-func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
+func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int) {
 	s.values.Store(k, 0)
 	var w []Work
 	v := 0
@@ -56,7 +57,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
 		k: k,
 		d: func() {
 			wg.Done()
-			s.values.Store(k, s.getValue(k) + 1)
+			s.values.Store(k, s.getValue(k)+1)
 		},
 	})
 	v = 1
@@ -65,7 +66,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
 		k: k,
 		d: func() {
 			wg.Done()
-			s.values.Store(k, s.getValue(k) + 1)
+			s.values.Store(k, s.getValue(k)+1)
 		},
 	})
 	v = 2
@@ -83,7 +84,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
 		k: k,
 		d: func() {
 			wg.Done()
-			s.values.Store(k, s.getValue(k) * 2)
+			s.values.Store(k, s.getValue(k)*2)
 		},
 	})
 	v = 8
@@ -101,7 +102,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
 		k: k,
 		d: func() {
 			wg.Done()
-			s.values.Store(k, s.getValue(k) - 2)
+			s.values.Store(k, s.getValue(k)-2)
 		},
 	})
 	v = 62
@@ -110,7 +111,7 @@ func (s *system) newWorkForKey(wg *sync.WaitGroup, k string) ([]Work, int){
 		k: k,
 		d: func() {
 			wg.Done()
-			s.values.Store(k, s.getValue(k) / 2)
+			s.values.Store(k, s.getValue(k)/2)
 		},
 	})
 	v = 31
@@ -143,7 +144,7 @@ func TestManyUnique(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(N)
 	sut := New()
-	for i := 0; i<N; i++ {
+	for i := 0; i < N; i++ {
 		sut.Submit(newRandomTestWork(&wg))
 	}
 	wg.Wait()
@@ -154,7 +155,7 @@ func BenchmarkManyUnique(b *testing.B) {
 	wg := sync.WaitGroup{}
 	wg.Add(b.N)
 	sut := New()
-	for i := 0; i<b.N; i++ {
+	for i := 0; i < b.N; i++ {
 		sut.Submit(newRandomTestWork(&wg))
 	}
 	wg.Wait()
@@ -188,7 +189,7 @@ func TestManyDuplicate(t *testing.T) {
 	s := newSystem()
 	var expecteds []int
 
-	for i := 0; i<N; i++ {
+	for i := 0; i < N; i++ {
 		w, exp := s.newWorkForKey(&wg, strconv.Itoa(i))
 		expecteds = append(expecteds, exp)
 		for _, unit := range w {
@@ -196,7 +197,7 @@ func TestManyDuplicate(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	for i := 0; i<N; i++ {
+	for i := 0; i < N; i++ {
 		actual := s.getValue(strconv.Itoa(i))
 		assert.Equal(t, expecteds[i], actual)
 	}
@@ -209,7 +210,7 @@ func BenchmarkManyDuplicate(b *testing.B) {
 	sut := New()
 	s := newSystem()
 
-	for i := 0; i<b.N; i++ {
+	for i := 0; i < b.N; i++ {
 		w, _ := s.newWorkForKey(&wg, strconv.Itoa(i))
 		for _, unit := range w {
 			sut.Submit(unit)
