@@ -1,5 +1,6 @@
 # go-workpool
-----
+[![Go Report Card](https://goreportcard.com/badge/github.com/raidancampbell/go-workpool)](https://goreportcard.com/report/github.com/raidancampbell/go-workpool)
+[![GoDoc](https://godoc.org/github.com/raidancampbell/go-workpool?status.svg)](https://godoc.org/github.com/raidancampbell/go-workpool)
 ```go
 import github.com/raidancampbell/go-workpool
 ```
